@@ -1,0 +1,5 @@
+login.txt
+saldo.txt
+launch.json
+*.session
+*.session-journal
