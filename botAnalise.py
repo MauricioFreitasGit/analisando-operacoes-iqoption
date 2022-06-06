@@ -487,6 +487,7 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
     try:
         for dialog in client.iter_dialogs():
             if dialog.is_channel:
+                #print(dialog.title)
                 if dialog.title == canal:
                     mensagem = pegar_mensagens_canal(canal)
                     break
