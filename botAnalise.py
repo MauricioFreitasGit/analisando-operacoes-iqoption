@@ -17,7 +17,6 @@ import re
 file = 'login.txt'
 
 if open(file, 'r').read() != '':
-
     dadosLogin = open(file, 'r').read()
     dados = dadosLogin.split(',')
     usuario = dados[0]
@@ -25,6 +24,8 @@ if open(file, 'r').read() != '':
     phone = dados[2]
     api_id = dados[3]
     api_hash = dados[4]
+
+
 else:
     print('Login não encontrado, favor criar um arquivo txt na raiz do projeto com usuário e senha separado por vírgula. O Bot será fechado')
     telegram_send.send(messages=['Login não encontrado, favor criar um arquivo txt na raiz do projeto com usuário e senha separado por vírgula. O Bot será fechado'])
@@ -80,10 +81,20 @@ qtdeGaleInicial = 0
 qtdeGale = 0
 operacaoAbortada = False
 pararRobo = False
+qtdGaleNormalMarcacao = 0
 
 
 def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, pararRobo):
     global operacaoAbortada, qtdeGale, valorEntrada
+
+    def registrarResultado(grupo,gaule,tempo,moeda,resultado):
+        try:
+            arquivo = open('analise.txt', 'a') 
+            linha = "GRUPO:" + str(grupo) + ";MOEDA:" + str(moeda) + ";GAULE:" + str(gaule) +  ";TIME:" + str(tempo) +";RESULTADO:" + str(resultado) + ";DATA:" + str(datetime.today().strftime('%d-%m-%Y')) + ";HORA:"+ str(datetime.today().strftime('%H:%M'))
+            arquivo.writelines(linha + "\n")    
+            arquivo.close()
+        except Exception as e:
+            print("Ocorreu um erro ao registrar do tipo " + e)
 
     def pegar_mensagens_canal(canal):
         try:
@@ -183,8 +194,8 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
             print('Erro inesperado no Gerenciamento/Stop!')
             telegram_send.send(messages=['Erro inesperado Gerenciamento/Stop!'])
 
-    def BuscarResultadoBinarias(id, par, direcao, timeFrame):
-        global lucro, somaValorEntrada, qtdeGale, valorEntrada
+    def BuscarResultadoBinarias(id, par, direcao, timeFrame,grupo):
+        global lucro, somaValorEntrada, qtdeGale, valorEntrada,qtdGaleNormalMarcacao
         evitaDuplicidadeMensagem = 0
         try:
             valor = 0
@@ -195,8 +206,10 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
 
             if valor > 0:
                 #print('RESULTADO: WIN / LUCRO:' + str(round(valor, 2)))
+                
                 telegram_send.send(messages = ['✅Resultado da operação: WIN✅\n💰Valor: R$' + str(round(valor, 2)) + ''])
-
+                registrarResultado(grupo,qtdGaleNormalMarcacao,timeFrame,par,"WIN")
+                qtdGaleNormalMarcacao = 0
                 valorEntrada = valorEntradaInicial
                 qtdeGale = qtdeGaleInicial
                 somaValorEntrada = 0
@@ -213,28 +226,31 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
 
                 if entradaMartingale == True:
                     evitaDuplicidadeMensagem = 1
+                    qtdGaleNormalMarcacao += 1
                     status, id = EfetuarEntradaBinarias(par, valorEntrada, direcao, timeFrame)
                     if status == True:
                         telegram_send.send(messages=['Entrada Martingale no valor de R$'+ str(round(valorEntrada,2)) +' efetuada com sucesso!'])
                         #Thread(target=BuscarResultadoBinarias, args=(id, par, direcao, timeFrame, valorEntrada)).start()
-                        BuscarResultadoBinarias(id, par, direcao, timeFrame)
+                        BuscarResultadoBinarias(id, par, direcao, timeFrame,grupo)
                     else:
                         telegram_send.send(messages=['Falha ao efetuar entrada...Processo interno na Corretora'])
                 else:
                     if qtdeGale == 0:
                         valorEntrada = valorEntradaInicial
+                        registrarResultado(grupo,qtdGaleNormalMarcacao,timeFrame,par,"LOSS")
+                        qtdGaleNormalMarcacao = 0
             
             if evitaDuplicidadeMensagem == 0:
                 telegram_send.send(messages = ['💸Seu saldo é de R$' + str(round(lucro, 2))])
-                StopGerenciamento()
+                #StopGerenciamento()
 
 
         except:    
             print('Erro inesperado Entrada/Busca resultado/Binarias!')
             telegram_send.send(messages=['Erro inesperado Entrada/Busca resultado/Binarias!'])
 
-    def BuscarResultadoDigitais(id, par, direcao, timeFrame):
-        global lucro, somaValorEntrada, qtdeGale, valorEntrada
+    def BuscarResultadoDigitais(id, par, direcao, timeFrame,grupo):
+        global lucro, somaValorEntrada, qtdeGale, valorEntrada,qtdGaleNormalMarcacao
         try:
             while True:
                 valor = 0
@@ -245,39 +261,45 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
                     lucro += round(valor, 2)
 
                     if valor > 0:
-                        telegram_send.send(messages = ['✅Resultado da operação: WIN✅\n💰Valor: R$' + str(round(valor, 2)) + ''])
-
+                        #telegram_send.send(messages = ['✅Resultado da operação: WIN✅\n💰Valor: R$' + str(round(valor, 2)) + ''])
+                        registrarResultado(grupo,qtdGaleNormalMarcacao,timeFrame,par,"WIN")
+                        qtdGaleNormalMarcacao = 0
                         valorEntrada = valorEntradaInicial
                         qtdeGale = qtdeGaleInicial
                         somaValorEntrada = 0
                     else:
-                        telegram_send.send(messages = ['❌RESULTADO: LOSS❌\n💰Valor: R$-' + str(round(valorEntrada,2)) + ''])
+                        #telegram_send.send(messages = ['❌RESULTADO: LOSS❌\n💰Valor: R$-' + str(round(valorEntrada,2)) + ''])
                         
                         somaValorEntrada += valorEntrada
                         entradaMartingale = True
                         entradaMartingale = GerenciamentoGale()
 
                         if entradaMartingale == True:
+                            qtdGaleNormalMarcacao += 1
                             status, id = EfetuarEntradaDigitais(par, valorEntrada, direcao, timeFrame)
                             if status == True:
                                 telegram_send.send(messages=['Entrada Martingale no valor de R$'+ str(round(valorEntrada,2)) +' efetuada com sucesso!'])
 
                                 #Thread(target=BuscarResultadoDigitais, args=(id, par, direcao, timeFrame, valorEntrada)).start()
-                                BuscarResultadoDigitais(id, par, direcao, timeFrame)
+                                BuscarResultadoDigitais(id, par, direcao, timeFrame,grupo)
                             else:
                                 print('Falha ao efetuar entrada...Processo interno na IQ Option') 
                         else:
                             if qtdeGale == 0:
+                                print(grupo,str(qtdeGale),timeFrame,par,"LOSS")
+                                registrarResultado(grupo,qtdGaleNormalMarcacao,timeFrame,par,"LOSS")
+                                qtdGaleNormalMarcacao = 0
+
                                 valorEntrada = valorEntradaInicial
                         
                     break
                 sleep(0.3)
 
-            telegram_send.send(messages = ['💸Seu saldo é de R$' + str(round(lucro, 2))])
-            StopGerenciamento()
-        except:    
-            print('Erro inesperado Entrada/Busca resultado/Digitais!')
-            telegram_send.send(messages=['Erro inesperado Entrada/Busca resultado/Digitais!'])
+            #telegram_send.send(messages = ['💸Seu saldo é de R$' + str(round(lucro, 2))])
+            #StopGerenciamento()
+        except Exception as e:    
+            print('Erro inesperado Entrada/Busca resultado/Digitais!' + e)
+            #telegram_send.send(messages=['Erro inesperado Entrada/Busca resultado/Digitais!'])
         
     def BuscarHoraAtualTimestamp():
         return int(mktime(datetime.strptime(datetime.now().strftime('%Y/%m/%d') + ' ' + (datetime.now()).strftime('%H:%M:%S'), "%Y/%m/%d %H:%M:%S").timetuple()))
@@ -361,7 +383,7 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
         direcaoEntrada = 'Venda' if dictSinal['direcao'] == 'put' else 'Compra'
         contaTipo = 'Demostração' if dictSinal['tipoConta'] == 'PRACTICE' else 'Real'
         tempoEspera = 0
-        StopGerenciamento()
+        #StopGerenciamento()
 
         if dictSinal['condicao'] == 'BAIXA':
             verificarVelaAnterior = True
@@ -387,9 +409,9 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
                                 telegram_send.send(messages=['Entrada efetuada com sucesso!'])
 
                                 if dictSinal['tipoAtivo'] == 'digital':
-                                    BuscarResultadoDigitais(id, dictSinal['ativo'], dictSinal['direcao'], dictSinal['timeframe'])
+                                    BuscarResultadoDigitais(id, dictSinal['ativo'], dictSinal['direcao'], dictSinal['timeframe'],dictSinal['grupo'])
                                 else:
-                                    BuscarResultadoBinarias(id, dictSinal['ativo'], dictSinal['direcao'], dictSinal['timeframe'])
+                                    BuscarResultadoBinarias(id, dictSinal['ativo'], dictSinal['direcao'], dictSinal['timeframe'],dictSinal['grupo'])
                                 break
                             else:
                                 print('Falha ao efetuar entrada...Processo interno na IQ Option')
@@ -397,8 +419,8 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
                                 break
                     else:
                         break
-                except Exception as erro:
-                    print('Erro inesperado na rotina de Operação!')
+                except Exception as e:
+                    print('Erro inesperado na rotina de Operação!' + e)
                     telegram_send.send(messages=['Erro inesperado na rotina de Operação!'])
 
 
@@ -441,7 +463,8 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
     def PreencherDictSinais(texto, tipoConta):
         try:
             timeframe = re.search("(: M(\d))", str(texto))
-            ativo = re.search("([A-Z]{6}-OTC|[A-Z]{6})", str(texto))
+            grupo = re.search("🔥(.*)🔥", str(texto))
+            ativo = re.search("(🎯 Ativo: [A-Z]{6}-OTC|🎯 Ativo: [A-Z]{6})", str(texto))
             direcao = re.search("(call|put)", str(texto))
             horario = re.search("([0-9]{2}\:[0-9]{2})", str(texto))
             gale = re.search("([a-z]e: [0-9])", str(texto))
@@ -450,12 +473,13 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
             payout = 0
  
             if direcao != None and ativo != None and horario != None and gale != None:
-                return {'timeframe': int(timeframe.group(2)), 'tipoConta': tipoConta, 'ativo': ativo.group(), 'direcao': direcao.group(), 'horario': horario.group(), 'gale': int(re.search("[0-9]",gale.group()).group()), 'condicao': condicao, 'tipoAtivo': tipoAtivo, 'payout': payout} 
+                return {'timeframe': int(timeframe.group(2)), 'tipoConta': tipoConta, 'ativo': ativo.group().replace("🎯 Ativo: ",""), 'direcao': direcao.group(), 'horario': horario.group(), 'gale': int(re.search("[0-9]",gale.group()).group()), 'condicao': condicao, 'tipoAtivo': tipoAtivo, 'payout': payout,'grupo':grupo.group().replace("🔥","")} 
             else:
                 return 0
         except Exception as erro:
             print('Erro inesperado ao tentar ler mensagem Splitada!')
             telegram_send.send(messages=['Erro inesperado ao tentar ler mensagem Splitada!'])
+
 
 
     mensagem = ""
@@ -485,7 +509,7 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
                 idGravado.append(idMensagemAtual[0])
                 operacaoAbortada = False
                 dictSinal = PreencherDictSinais(mensagem, tipoConta)
-
+                print(dictSinal)
                 if dictSinal != 0:
                     horarioAtual = BuscarHoraAtualTimestamp()
                     horaEntrada = BuscarHoraEntradaTimestamp(dictSinal['horario'])
@@ -513,9 +537,9 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
                 else:
                     print('Bot não conseguiu fazer a leitura do Sinal!')
                     telegram_send.send(messages=['Bot não conseguiu fazer a leitura do Sinal!'])
-    except:
-        print('Erro inesperado Definição Payout/Iniciar Operação!')
-        telegram_send.send(messages=['Erro inesperado Definição Payout/Iniciar Operação!'])
+    except Exception as e:
+        print('Erro inesperado Definição Payout/Iniciar Operação! ' + e)
+        telegram_send.send(messages=['Erro inesperado Definição Payout/Iniciar Operação!'] + e)
 
 def AtualizaParametrosEntradaOrigemTelegram():
     global valorEntrada
@@ -547,4 +571,4 @@ ticker = threading.Event()
 while not ticker.wait(WAIT_TIME_SECONDS):
     parametros = AtualizaParametrosEntradaOrigemTelegram()
 
-    iniciarProcesso(parametros[0], parametros[2], parametros[3], parametros[4],parametros[5])
+    iniciarProcesso(parametros[0], 99999999, 999999999, parametros[4],parametros[5])
