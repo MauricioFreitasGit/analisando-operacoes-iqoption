@@ -483,7 +483,7 @@ def iniciarProcesso(valorEntradaInicial, stopWin, stopLoss, tipoGerenciamento, p
 
 
     mensagem = ""
-    canal = "Canal de testes"
+    canal = "Canal milionario"
     try:
         for dialog in client.iter_dialogs():
             if dialog.is_channel:
